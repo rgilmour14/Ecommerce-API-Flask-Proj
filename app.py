@@ -26,7 +26,7 @@ ma = Marshmallow(app)
 
 # User Table
 class User(Base):
-    __tablename__ = "User"
+    __tablename__ = "user"
     
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -35,11 +35,11 @@ class User(Base):
     email: Mapped[str] = mapped_column(db.String(200))
     
     # one to many relationship => one user to many orders
-    orders: Mapped[List["Orders"]] = db.relationship(back_populates='user')
+    orders: Mapped[List["Orders"]] = db.relationship(back_populates='user_orders')
 
 # Association table for many to many relationships
 order_products = db.Table(
-    "Order_Products",
+    "order_products",
     Base.metadata,
     db.Column('order_id', db.ForeignKey('orders.id')),
     db.Column('product_id', db.ForeignKey('products.id'))    
@@ -52,10 +52,10 @@ class Orders(Base):
     # Columns
     id: Mapped[int] = mapped_column(primary_key=True)
     order_date: Mapped[date] = mapped_column(db.Date, nullable=False)
-    user_id: Mapped[int] = mapped_column(db.ForeignKey('User.id'))
+    user_id: Mapped[int] = mapped_column(db.ForeignKey('user.id'))
     
     # one to many relationship to the user table
-    user: Mapped['User'] = db.relationship(back_populates='orders')
+    user_orders: Mapped['User'] = db.relationship(back_populates='orders')
     products: Mapped[List['Products']] = db.relationship(secondary=order_products, back_populates="orders")
 
 
@@ -259,7 +259,7 @@ def add_order():
     else:
         return jsonify({"message": "Invalid user id"}), 400
 
-# ADD ITEM TO ORDER
+# Adding a product to an order
 @app.route('/orders/<int:order_id>/add_product/<int:product_id>', methods=['PUT'])
 def add_product(order_id, product_id):
     order = db.session.get(Orders, order_id) 
@@ -275,41 +275,44 @@ def add_product(order_id, product_id):
     else: # order or product does not exist
         return jsonify({"Message": "Invalid order id or product id."}), 400
     
-# # Deleting a product from an Order 
-# @app.route("/orders/<int:order_id>/remove_product", methods=['DELETE'])
-# def delete_product(id):
-#     product = db.session.get(Products, id)
+# Deleting a product from an Order 
+@app.route("/orders/<int:order_id>/remove_product/<int:product_id>", methods=['DELETE'])
+def remove_product(order_id, product_id):
+    order = db.session.get(Orders, order_id) 
+    product = db.session.get(Products, product_id)
 
-#     if not product:
-#         return jsonify({"message": "Invalid product id"}), 400
+    if order and product: # check to see if both exist
+        if product in order.products: # Ensure the product is in the order
+            order.products.remove(product) # removes relationship from order to product
+            db.session.commit() 
+            return jsonify({"Message": "Successfully removed item from order."}), 200
+        else: # Product is in order.products
+            return jsonify({"Message": "Item is not included in this order."}), 400
+    else: # order or product does not exist
+        return jsonify({"Message": "Invalid order id or product id."}), 400
     
-#     db.session.delete(product)
-#     db.session.commit()
-#     return jsonify({"message": f"successfully deleted product {id}"}), 200
 
 # Get all Orders for a User
-# @app.route('/orders/user/<int:user_id>', methods=['GET'])
-# def get_user_order(user_id, order_id):
-#     user = db.session.get(User, user_id)
-#     order = db.session.get(Orders, order_id) 
+@app.route('/users/<int:user_id>/orders', methods=['GET'])
+def get_user_orders(user_id):
+    users = db.session.get(User, user_id)
 
+    if users is None:
+        return jsonify({"Error": "User not found"}), 404
+    return users_schema.jsonify(users.orders), 200
 
-#     if order and product: # check to see if both exist
-#         if product not in order.products: # Ensure the product is not already on the order
-#             order.products.append(product) # create relationship from order to product
-#             db.session.commit() 
-#             return jsonify({"Message": "Successfully added item to order."}), 200
-#         else: # Product is in order.products
-#             return jsonify({"Message": "Item is already included in this order."}), 400
-#     else: # order or product does not exist
-#         return jsonify({"Message": "Invalid order id or product id."}), 400
+# Get all Products for an Order
+@app.route('/orders/<int:order_id>/products', methods=['GET'])
+def get_order_products(order_id):
+    orders = db.session.get(Orders, order_id)
+
+    if orders is None:
+        return jsonify({"Error": "Order not found"}), 404
+    return orders_schema.jsonify(orders.products), 200
+
+    
     
 if __name__ == '__main__':
     app.run(debug=True)        
-    
-
-
-orders.user_id
-        
-                
+                  
 
